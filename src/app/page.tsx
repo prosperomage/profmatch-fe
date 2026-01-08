@@ -1,65 +1,179 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { PageLayout, Container } from "@/components/layout";
+import { Input, TextArea, Button, FileUpload } from "@/components/ui";
+import type { UploadedFile } from "@/components/ui";
+
+const USE_MOCK_DATA = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 export default function Home() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [university, setUniversity] = useState("");
+  const [researchInterests, setResearchInterests] = useState("");
+  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [errors, setErrors] = useState<{
+    university?: string;
+    researchInterests?: string;
+    files?: string;
+    submit?: string;
+  }>({});
+
+  const validateForm = () => {
+    const newErrors: typeof errors = {};
+
+    if (!university.trim()) {
+      newErrors.university = "Please enter a university name or URL";
+    }
+
+    if (!researchInterests.trim()) {
+      newErrors.researchInterests = "Please describe your research interests";
+    }
+
+    if (files.length === 0) {
+      newErrors.files = "Please upload your resume";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleFilesChange = (newFiles: UploadedFile[]) => {
+    setFiles(newFiles);
+    // Clear file error when user uploads a file
+    if (newFiles.length > 0 && errors.files) {
+      setErrors((prev) => ({ ...prev, files: undefined }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      const interests = researchInterests
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (USE_MOCK_DATA) {
+        // Demo mode: skip API calls, store form data and navigate
+        sessionStorage.setItem(
+          "matchData",
+          JSON.stringify({
+            sessionId: "mock-session",
+            matchId: "mock-match",
+            university,
+            researchInterests: interests,
+          })
+        );
+
+        router.push("/processing");
+      } else {
+        // Real mode: make API calls
+        const { createSession, uploadFile, startMatch } = await import("@/lib/api");
+
+        const session = await createSession();
+
+        const fileIds: string[] = [];
+        for (const { file } of files) {
+          const response = await uploadFile(session.session_id, file);
+          fileIds.push(response.file_id);
+        }
+
+        const { match_id: matchId } = await startMatch(
+          session.session_id,
+          university,
+          interests,
+          fileIds
+        );
+
+        sessionStorage.setItem(
+          "matchData",
+          JSON.stringify({
+            sessionId: session.session_id,
+            matchId,
+            university,
+            researchInterests: interests,
+          })
+        );
+
+        router.push("/processing");
+      }
+    } catch (err) {
+      setErrors({
+        submit:
+          err instanceof Error ? err.message : "Something went wrong. Please try again.",
+      });
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <PageLayout>
+      <Container className="py-12 md:py-20">
+        <div className="mx-auto max-w-xl">
+          <div className="mb-10 text-center">
+            <h1 className="mb-3 text-3xl font-semibold text-text-primary md:text-4xl">
+              Find Your Research Supervisor
+            </h1>
+            <p className="text-lg text-text-secondary">
+              Match with professors whose research aligns with your academic
+              goals
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {errors.submit && (
+              <div className="rounded-md bg-error/10 p-4 text-sm text-error">
+                {errors.submit}
+              </div>
+            )}
+
+            <Input
+              label="University"
+              placeholder="e.g., MIT or https://www.mit.edu"
+              value={university}
+              onChange={(e) => setUniversity(e.target.value)}
+              error={errors.university}
+              disabled={isLoading}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+            <TextArea
+              label="Research Interests"
+              placeholder="e.g., machine learning, computer vision, natural language processing"
+              value={researchInterests}
+              onChange={(e) => setResearchInterests(e.target.value)}
+              error={errors.researchInterests}
+              disabled={isLoading}
+            />
+
+            <FileUpload
+              label="Your Resume"
+              value={files}
+              onChange={handleFilesChange}
+              error={errors.files}
+              disabled={isLoading}
+              multiple={false}
+            />
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              isLoading={isLoading}
+            >
+              Find Matches
+            </Button>
+          </form>
         </div>
-      </main>
-    </div>
+      </Container>
+    </PageLayout>
   );
 }
