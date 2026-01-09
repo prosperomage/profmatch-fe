@@ -52,16 +52,16 @@ export function useMatch() {
   );
 
   const pollStatus = useCallback(
-    async (id: string): Promise<MatchResultsResponse> => {
+    async (id: string, sessionId: string): Promise<MatchResultsResponse> => {
       return new Promise((resolve, reject) => {
         const poll = async () => {
           try {
-            const statusResponse = await getMatchStatus(id);
+            const statusResponse = await getMatchStatus(id, sessionId);
             setStatus(statusResponse);
 
             if (statusResponse.status === "completed") {
               stopPolling();
-              const resultsResponse = await getMatchResults(id);
+              const resultsResponse = await getMatchResults(id, sessionId);
               setResults(resultsResponse);
               resolve(resultsResponse);
             } else if (statusResponse.status === "failed") {
