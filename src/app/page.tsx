@@ -25,7 +25,16 @@ export default function Home() {
     const newErrors: typeof errors = {};
 
     if (!university.trim()) {
-      newErrors.university = "Please enter a university name or URL";
+      newErrors.university = "Please enter a university URL";
+    } else {
+      try {
+        const url = new URL(university);
+        if (!url.protocol.startsWith("http")) {
+          newErrors.university = "Please enter a valid URL (e.g., https://www.mit.edu)";
+        }
+      } catch {
+        newErrors.university = "Please enter a valid URL (e.g., https://www.mit.edu)";
+      }
     }
 
     if (!researchInterests.trim()) {
@@ -137,8 +146,8 @@ export default function Home() {
             )}
 
             <Input
-              label="University"
-              placeholder="e.g., MIT or https://www.mit.edu"
+              label="University URL"
+              placeholder="e.g., https://www.mit.edu"
               value={university}
               onChange={(e) => setUniversity(e.target.value)}
               error={errors.university}
